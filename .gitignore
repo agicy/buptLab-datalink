@@ -1,0 +1,17 @@
+# provided files
+crc32.c
+lprintf.c
+lprintf.h
+protocol.c
+protocol.h
+Makefile
+
+# compilation outputs
+*.o
+datalink
+
+# runtime log
+*.log
+
+# vscode settings
+.vscode
