@@ -14,13 +14,15 @@ static void put_frame(uint8_t *fp, int len) {
     phl_ready = 0;
 }
 
-#define MAX_SEQ 63
+#define MAX_SEQ ((1 << SEQ_BITS) - 1)
 #define NR_BUFS ((MAX_SEQ + 1) / 2)
-#define DATA_TIMER 2000
-#define ACK_TIMER 300
 
 typedef uint8_t seq_nr;
 typedef uint8_t packet_t[PKT_LEN];
+
+#if COMPACT_FRAME
+
+#define KIND_ACK_SIZE 1
 
 typedef struct frame {
     uint8_t kind_ack;
@@ -40,6 +42,33 @@ seq_nr get_ack(const frame *const fp) {
 void set_kind_ack(frame *const fp, uint8_t kind, seq_nr ack) {
     fp->kind_ack = (kind << 6) | ack;
 }
+
+#else
+
+#define KIND_ACK_SIZE 2
+
+typedef struct frame {
+    uint8_t kind;
+    seq_nr ack;
+    seq_nr seq;
+    packet_t data;
+    uint32_t padding;
+} frame;
+
+uint8_t get_kind(const frame *const fp) {
+    return fp->kind;
+}
+
+seq_nr get_ack(const frame *const fp) {
+    return fp->ack;
+}
+
+void set_kind_ack(frame *const fp, uint8_t kind, seq_nr ack) {
+    fp->kind = kind;
+    fp->ack = ack;
+}
+
+#endif
 
 typedef struct window {
     seq_nr begin, end;
@@ -72,7 +101,7 @@ static inline void handle_data_frame(seq_nr seq, seq_nr expected_id) {
     set_kind_ack(&f, FRAME_DATA, expected_id);
     f.seq = seq;
     memcpy(f.data, sender.buffer[seq % NR_BUFS], sizeof(f.data));
-    put_frame((uint8_t *)&f, sizeof(f.kind_ack) + sizeof(f.seq) + sizeof(f.data));
+    put_frame((uint8_t *)&f, KIND_ACK_SIZE + sizeof(f.seq) + sizeof(f.data));
     return;
 }
 
@@ -85,7 +114,7 @@ static inline void send_data_frame(seq_nr seq, seq_nr expected_id) {
 static inline void handle_ack_frame(seq_nr expected_id) {
     frame f;
     set_kind_ack(&f, FRAME_ACK, expected_id);
-    put_frame((uint8_t *)&f, sizeof(f.kind_ack));
+    put_frame((uint8_t *)&f, KIND_ACK_SIZE);
 }
 
 static inline void send_ack_frame(seq_nr expected_id) {
@@ -95,7 +124,7 @@ static inline void send_ack_frame(seq_nr expected_id) {
 static inline void handle_nak_frame(seq_nr expected_id) {
     frame f;
     set_kind_ack(&f, FRAME_NAK, expected_id);
-    put_frame((uint8_t *)&f, sizeof(f.kind_ack));
+    put_frame((uint8_t *)&f, KIND_ACK_SIZE);
 }
 
 static inline void send_nak_frame(seq_nr expected_id) {

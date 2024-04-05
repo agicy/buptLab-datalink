@@ -39,10 +39,12 @@ static size_t query(size_t len, uint32_t crc) {
 }
 
 int crc_ec(uint8_t *message, size_t len, uint32_t crc) {
+#if ECC
     size_t pos = query(len, crc);
     if (pos != SIZE_MAX) {
         message[pos >> 3] ^= (1 << (pos & 7));
         return 0;
     }
+#endif
     return 1;
 }
