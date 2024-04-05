@@ -4,7 +4,6 @@ lprintf.c
 lprintf.h
 protocol.c
 protocol.h
-Makefile
 
 # compilation outputs
 *.o

@@ -1,10 +1,10 @@
+#include "datalink.h"
+#include "crc_ec.h"
+#include "protocol.h"
 #include <assert.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
-
-#include "datalink.h"
-#include "protocol.h"
 
 static int phl_ready = 0;
 
@@ -14,7 +14,7 @@ static void put_frame(uint8_t *fp, int len) {
     phl_ready = 0;
 }
 
-#define MAX_SEQ 63
+#define MAX_SEQ 31
 #define NR_BUFS ((MAX_SEQ + 1) / 2)
 #define DATA_TIMER 2000
 #define ACK_TIMER 300
@@ -95,11 +95,13 @@ static inline void send_nak_frame(seq_nr expected_id) {
 }
 
 int main(int argc, char **argv) {
+    protocol_init(argc, argv);
+
     int event, arg;
     frame f;
-    int len = 0;
+    int len;
+    uint32_t checksum;
 
-    protocol_init(argc, argv);
     lprintf("Designed by Lu Anlai, build: " __DATE__ "\n");
 
     enable_network_layer();
@@ -127,11 +129,19 @@ int main(int argc, char **argv) {
 
         case FRAME_RECEIVED:
             len = recv_frame((uint8_t *)&f, sizeof f);
-            if (len < 5 || crc32((uint8_t *)&f, len) != 0) {
-                dbg_event("**** Receiver Error, Bad CRC Checksum\n");
-                if (no_nak)
-                    send_nak_frame(receiver.begin);
-                break;
+            checksum = crc32((uint8_t *)&f, len);
+            assert(len >= 5);
+            if (checksum != 0) {
+                if (checksum) {
+                    if (crc_ec((uint8_t *)&f, len, checksum)) {
+                        assert(crc32((uint8_t *)&f, len) != 0);
+                        dbg_event("**** Receiver Error, Bad CRC Checksum\n");
+                        if (no_nak)
+                            send_nak_frame(receiver.begin);
+                        break;
+                    }
+                    assert(crc32((uint8_t *)&f, len) == 0);
+                }
             }
             switch (f.kind) {
             case FRAME_DATA:
