@@ -14,7 +14,7 @@ static void put_frame(uint8_t *fp, int len) {
     phl_ready = 0;
 }
 
-#define MAX_SEQ 31
+#define MAX_SEQ 63
 #define NR_BUFS ((MAX_SEQ + 1) / 2)
 #define DATA_TIMER 2000
 #define ACK_TIMER 300
@@ -23,12 +23,24 @@ typedef uint8_t seq_nr;
 typedef uint8_t packet_t[PKT_LEN];
 
 typedef struct frame {
-    uint8_t kind;
-    seq_nr ack;
+    uint8_t kind_ack;
     seq_nr seq;
     packet_t data;
     uint32_t padding;
 } frame;
+
+uint8_t get_kind(const frame *const fp) {
+    return (fp->kind_ack >> 6);
+}
+
+seq_nr get_ack(const frame *const fp) {
+    return fp->kind_ack & 0x3f;
+}
+
+void set_kind_ack(frame *const fp, uint8_t kind, seq_nr ack) {
+    fp->kind_ack = (kind << 6) | ack;
+}
+
 typedef struct window {
     seq_nr begin, end;
     uint8_t size;
@@ -57,11 +69,10 @@ window sender, receiver;
 
 static inline void handle_data_frame(seq_nr seq, seq_nr expected_id) {
     frame f;
-    f.kind = FRAME_DATA;
-    f.ack = expected_id;
+    set_kind_ack(&f, FRAME_DATA, expected_id);
     f.seq = seq;
     memcpy(f.data, sender.buffer[seq % NR_BUFS], sizeof(f.data));
-    put_frame((uint8_t *)&f, sizeof(f.kind) + sizeof(f.ack) + sizeof(f.seq) + sizeof(f.data));
+    put_frame((uint8_t *)&f, sizeof(f.kind_ack) + sizeof(f.seq) + sizeof(f.data));
     return;
 }
 
@@ -73,9 +84,8 @@ static inline void send_data_frame(seq_nr seq, seq_nr expected_id) {
 
 static inline void handle_ack_frame(seq_nr expected_id) {
     frame f;
-    f.kind = FRAME_ACK;
-    f.ack = expected_id;
-    put_frame((uint8_t *)&f, sizeof(f.kind) + sizeof(f.ack));
+    set_kind_ack(&f, FRAME_ACK, expected_id);
+    put_frame((uint8_t *)&f, sizeof(f.kind_ack));
 }
 
 static inline void send_ack_frame(seq_nr expected_id) {
@@ -84,9 +94,8 @@ static inline void send_ack_frame(seq_nr expected_id) {
 
 static inline void handle_nak_frame(seq_nr expected_id) {
     frame f;
-    f.kind = FRAME_NAK;
-    f.ack = expected_id;
-    put_frame((uint8_t *)&f, sizeof(f.kind) + sizeof(f.ack));
+    set_kind_ack(&f, FRAME_NAK, expected_id);
+    put_frame((uint8_t *)&f, sizeof(f.kind_ack));
 }
 
 static inline void send_nak_frame(seq_nr expected_id) {
@@ -131,21 +140,18 @@ int main(int argc, char **argv) {
             len = recv_frame((uint8_t *)&f, sizeof f);
             checksum = crc32((uint8_t *)&f, len);
             assert(len >= 5);
-            if (checksum != 0) {
-                if (checksum) {
-                    if (crc_ec((uint8_t *)&f, len, checksum)) {
-                        assert(crc32((uint8_t *)&f, len) != 0);
-                        dbg_event("**** Receiver Error, Bad CRC Checksum\n");
-                        if (no_nak)
-                            send_nak_frame(receiver.begin);
-                        break;
-                    }
-                    assert(crc32((uint8_t *)&f, len) == 0);
+            if (checksum) {
+                if (crc_ec((uint8_t *)&f, len, checksum)) {
+                    dbg_event("**** Receiver Error, Bad CRC Checksum\n");
+                    if (no_nak)
+                        send_nak_frame(receiver.begin);
+                    break;
                 }
+                assert(crc32((uint8_t *)&f, len) == 0);
             }
-            switch (f.kind) {
+            switch (get_kind(&f)) {
             case FRAME_DATA:
-                dbg_frame("Recv DATA %d %d, ID %d\n", f.seq, f.ack, *(short *)f.data);
+                dbg_frame("Recv DATA %d %d, ID %d\n", f.seq, get_ack(&f), *(short *)f.data);
                 if (between(&receiver, f.seq)) {
                     if (!arrived[f.seq % NR_BUFS]) {
                         arrived[f.seq % NR_BUFS] = 1;
@@ -167,15 +173,15 @@ int main(int argc, char **argv) {
                 }
                 break;
             case FRAME_ACK:
-                dbg_frame("Recv ACK %d\n", f.ack);
+                dbg_frame("Recv ACK %d\n", get_ack(&f));
                 break;
             case FRAME_NAK:
-                dbg_frame("Recv NAK %d\n", f.ack);
-                if (between(&sender, f.ack))
-                    send_data_frame(f.ack, receiver.begin);
+                dbg_frame("Recv NAK %d\n", get_ack(&f));
+                if (between(&sender, get_ack(&f)))
+                    send_data_frame(get_ack(&f), receiver.begin);
                 break;
             }
-            while (between(&sender, prev(f.ack))) {
+            while (between(&sender, prev(get_ack(&f)))) {
                 stop_timer(sender.begin % NR_BUFS);
                 sender.begin = next(sender.begin);
                 --sender.size;

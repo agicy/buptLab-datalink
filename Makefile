@@ -1,6 +1,6 @@
 CC=gcc
 CXX=g++
-CFLAGS=-O2 -Wall -Wextra
+CFLAGS=-static -O2 -DNDEBUG 
 
 datalink: datalink.o protocol.o lprintf.o crc32.o crc_ec.o
 	$(CXX) datalink.o protocol.o lprintf.o crc32.o crc_ec.o -o datalink -lm
