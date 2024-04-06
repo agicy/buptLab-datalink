@@ -7,7 +7,9 @@ protocol.h
 
 # compilation outputs
 *.o
-datalink
+
+# testcase outputs
+TEST_*
 
 # runtime log
 *.log
