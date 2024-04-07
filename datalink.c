@@ -6,6 +6,14 @@
 #include <stdlib.h>
 #include <string.h>
 
+static void handler(int signum) {
+    lprintf("signal %d raised!\n", signum);
+    fflush(stdout);
+    if (log_file)
+        fflush(log_file);
+    exit(0);
+}
+
 static int phl_ready = 0;
 
 static void put_frame(uint8_t *fp, int len) {
@@ -107,6 +115,7 @@ static inline void send_sack_frame(seq_nr ack_id) {
 }
 
 int main(int argc, char **argv) {
+    signal(SIGTERM, handler);
     protocol_init(argc, argv);
 
     int event, arg;

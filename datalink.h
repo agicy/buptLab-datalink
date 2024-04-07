@@ -3,9 +3,17 @@
 #ifndef DATALINK_H
 #define DATALINK_H
 
+#ifndef SEQ_BITS
 #define SEQ_BITS 6
+#endif
+
+#ifndef DATA_TIMER
 #define DATA_TIMER 1390
+#endif
+
+#ifndef ACK_TIMER
 #define ACK_TIMER 278
+#endif
 
 /* FRAME kind */
 #define FRAME_SACK 0
