@@ -11,11 +11,17 @@
 - 捎带确认机制；
 - NAK 通知机制。
 
+为优化信道利用率，还实现特性如下：
+
+- CRC 纠错。
+
 ## 文件结构
 
 ```
 .
 ├── crc32.c      # CRC32 校验和计算
+├── crc_ec.cpp   # CRC 纠错实现
+├── crc_ec.hpp   # CRC 纠错函数声明
 ├── datalink.c   # 数据链路层协议实现
 ├── datalink.h   # 协议参数规定
 ├── lprintf.c    # 日志输出

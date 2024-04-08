@@ -1,4 +1,5 @@
 #include "datalink.h"
+#include "crc_ec.hpp"
 #include "protocol.h"
 #include <assert.h>
 #include <signal.h>
@@ -149,12 +150,13 @@ int main(int argc, char **argv) {
         case FRAME_RECEIVED:
             len = recv_frame((uint8_t *)&f, sizeof f);
             checksum = crc32((uint8_t *)&f, len);
-            if (checksum) {
-                dbg_event("**** Receiver Error, Bad CRC Checksum\n");
-                if (no_nak)
-                    send_nak_frame(receiver.begin);
-                break;
-            }
+            if (checksum)
+                if (crc_ec((uint8_t *)&f, len, checksum)) {
+                    dbg_event("**** Receiver Error, Bad CRC Checksum\n");
+                    if (no_nak)
+                        send_nak_frame(receiver.begin);
+                    break;
+                }
 
             switch (f.kind) {
 

@@ -1,8 +1,10 @@
-# Set the C compiler
+# Set the C and C++ compilers
 CC=gcc
+CXX=g++
 
-# Set the flags for the C compiler
+# Set the flags for the C and C++ compilers
 CFLAGS=-static -Ofast -Wall -Wextra -Werror
+CXXFLAGS=-static -Ofast -Wall -Wextra -Werror
 
 # Check if TEST_TIME is not set
 TEST_TIME=
@@ -34,15 +36,19 @@ test: datalink
 	)
 
 # Define the datalink target
-datalink: clean datalink.o protocol.o lprintf.o crc32.o
+datalink: clean datalink.o protocol.o lprintf.o crc32.o crc_ec.o
 	# Create the output directory if it does not exist
 	mkdir $(OUTPUT_DIR) -p
 	# Link the object files to create the datalink executable
-	$(CC) datalink.o protocol.o lprintf.o crc32.o -o $(OUTPUT_DIR)/datalink -lm
+	$(CXX) datalink.o protocol.o lprintf.o crc32.o crc_ec.o -o $(OUTPUT_DIR)/datalink -lm
 
 # Compile the datalink.c file into an object file
 datalink.o: datalink.c
 	$(CC) $(CFLAGS) -DSEQ_BITS=$(SEQ_BITS) -DDATA_TIMER=$(DATA_TIMER) -DACK_TIMER=$(ACK_TIMER) -c datalink.c
+
+# Compile the crc_ec.cpp file into an object file
+crc_ec.o: crc_ec.cpp
+	$(CXX) $(CXXFLAGS) -DECC=$(ECC) -c crc_ec.cpp
 
 # Define the clean target to remove all object files
 clean:
@@ -66,6 +72,12 @@ ifeq ($(ACK_TIMER),)
 ACK_TIMER=278
 endif
 
+# Check if ECC is not set
+ECC=
+ifeq ($(ECC),)
+ECC=1
+endif
+
 # Check if SEQ_BITS is between 1 and 6, if not, throw an error
 ifeq ($(filter $(SEQ_BITS),1 2 3 4 5 6),)
 $(error SEQ_BITS must be between 1 and 6)
@@ -73,6 +85,9 @@ endif
 
 # Define the output directory name based on the parameters
 OUTPUT_DIR=TEST_$(SEQ_BITS)BITS_$(DATA_TIMER)DATA_$(ACK_TIMER)ACK
+ifeq ($(ECC),1)
+OUTPUT_DIR+=_ECC
+endif
 
 # Remove spaces from the output directory name
 space=$(empty) $(empty)
