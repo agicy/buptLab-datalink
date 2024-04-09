@@ -44,7 +44,7 @@ datalink: clean datalink.o protocol.o lprintf.o crc32.o crc_ec.o
 
 # Compile the datalink.c file into an object file
 datalink.o: datalink.c
-	$(CC) $(CFLAGS) -DSEQ_BITS=$(SEQ_BITS) -DDATA_TIMER=$(DATA_TIMER) -DACK_TIMER=$(ACK_TIMER) -c datalink.c
+	$(CC) $(CFLAGS) -DSEQ_BITS=$(SEQ_BITS) -DDATA_TIMER=$(DATA_TIMER) -DACK_TIMER=$(ACK_TIMER) -DCOMPACT_FRAME=$(COMPACT_FRAME) -c datalink.c
 
 # Compile the crc_ec.cpp file into an object file
 crc_ec.o: crc_ec.cpp
@@ -78,6 +78,12 @@ ifeq ($(ECC),)
 ECC=1
 endif
 
+# Check if COMPACT_FRAME is not set
+COMPACT_FRAME=
+ifeq ($(COMPACT_FRAME),)
+COMPACT_FRAME=1
+endif
+
 # Check if SEQ_BITS is between 1 and 6, if not, throw an error
 ifeq ($(filter $(SEQ_BITS),1 2 3 4 5 6),)
 $(error SEQ_BITS must be between 1 and 6)
@@ -85,6 +91,9 @@ endif
 
 # Define the output directory name based on the parameters
 OUTPUT_DIR=TEST_$(SEQ_BITS)BITS_$(DATA_TIMER)DATA_$(ACK_TIMER)ACK
+ifeq ($(COMPACT_FRAME),1)
+OUTPUT_DIR+=_COMPACT
+endif
 ifeq ($(ECC),1)
 OUTPUT_DIR+=_ECC
 endif

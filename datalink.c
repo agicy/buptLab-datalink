@@ -29,6 +29,20 @@ static void put_frame(uint8_t *fp, int len) {
 typedef uint8_t seq_nr;
 typedef uint8_t packet_t[PKT_LEN];
 
+#if COMPACT_FRAME
+
+#define KIND_ACK_SIZE 1
+
+typedef struct frame {
+    uint8_t kind : 2;
+    uint8_t ack : 6;
+    seq_nr seq;
+    packet_t data;
+    uint32_t padding;
+} frame;
+
+#else
+
 #define KIND_ACK_SIZE 2
 
 typedef struct frame {
@@ -38,6 +52,8 @@ typedef struct frame {
     packet_t data;
     uint32_t padding;
 } frame;
+
+#endif
 
 typedef struct window {
     seq_nr begin, end;
