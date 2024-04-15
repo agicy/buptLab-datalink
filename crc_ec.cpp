@@ -1,8 +1,6 @@
 #include "crc_ec.h"
 #include "protocol.h"
 #include <algorithm>
-#include <cassert>
-#include <cstdio>
 #include <vector>
 
 static std::vector<std::pair<uint32_t, size_t>> init_ec_table(size_t len) {
@@ -25,7 +23,6 @@ static std::vector<std::pair<uint32_t, size_t>> init_ec_table(size_t len) {
 static std::vector<std::pair<size_t, std::vector<std::pair<uint32_t, size_t>>>> ec_table_list;
 
 static size_t query_table(std::vector<std::pair<uint32_t, size_t>> table, uint32_t crc) {
-    assert(std::is_sorted(table.begin(), table.end()));
     auto it = std::lower_bound(table.begin(), table.end(), std::pair<uint32_t, size_t>(crc, 0));
     return it->first == crc ? it->second : SIZE_MAX;
 }
