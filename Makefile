@@ -1,75 +1,95 @@
+# Set the C and C++ compilers
 CC=gcc
 CXX=g++
+
+# Set the flags for the C and C++ compilers
 CFLAGS=-static -O2 -DNDEBUG
 CXXFLAGS=-static -O2 -DNDEBUG
 
-TEST_TIME=1800
-SLEEP_TIME=2100
+# Check if TEST_TIME is set, if not, throw an error
+TEST_TIME=
+ifeq ($(TEST_TIME),)
+$(error TEST_TIME is not set)
+endif
 
+# Define the options for the datalink program
+opt1=--port=10001 --utopia
+opt2=--port=10002
+opt3=--port=10003 --flood --utopia
+opt4=--port=10004 --flood
+opt5=--port=10005 --flood --ber=1e-4
+
+# Define the test target
 test: datalink
-	screen -dmS datalinkA bash -c 'cd $(OUTPUT_DIR); timeout $(TEST_TIME) ./datalink a --utopia --log=u_a.log';
-	screen -dmS datalinkB bash -c 'cd $(OUTPUT_DIR); timeout $(TEST_TIME) ./datalink b --utopia --log=u_b.log';
-	sleep $(SLEEP_TIME);
-	screen -dmS datalinkA bash -c 'cd $(OUTPUT_DIR); timeout $(TEST_TIME) ./datalink a --log=_a.log';
-	screen -dmS datalinkB bash -c 'cd $(OUTPUT_DIR); timeout $(TEST_TIME) ./datalink b --log=_b.log';
-	sleep $(SLEEP_TIME);
-	screen -dmS datalinkA bash -c 'cd $(OUTPUT_DIR); timeout $(TEST_TIME) ./datalink a --flood --utopia --log=fu_a.log';
-	screen -dmS datalinkB bash -c 'cd $(OUTPUT_DIR); timeout $(TEST_TIME) ./datalink b --flood --utopia --log=fu_b.log';
-	sleep $(SLEEP_TIME);
-	screen -dmS datalinkA bash -c 'cd $(OUTPUT_DIR); timeout $(TEST_TIME) ./datalink a --flood --log=f_a.log';
-	screen -dmS datalinkB bash -c 'cd $(OUTPUT_DIR); timeout $(TEST_TIME) ./datalink b --flood --log=f_b.log';
-	sleep $(SLEEP_TIME);
-	screen -dmS datalinkA bash -c 'cd $(OUTPUT_DIR); timeout $(TEST_TIME) ./datalink a --flood --ber=1e-4 --log=fb1e-4_a.log';
-	screen -dmS datalinkB bash -c 'cd $(OUTPUT_DIR); timeout $(TEST_TIME) ./datalink b --flood --ber=1e-4 --log=fb1e-4_b.log';
+	# For each option, run the datalink program in a new screen session
+	@$(foreach i,$(shell seq 1 5),\
+		screen -dmS $(i)_datalinkA bash -c 'cd $(OUTPUT_DIR); timeout $(TEST_TIME) ./datalink a $(opt$(i)) --log=$(i)_a.log; exit';\
+		screen -dmS $(i)_datalinkB bash -c 'cd $(OUTPUT_DIR); timeout $(TEST_TIME) ./datalink b $(opt$(i)) --log=$(i)_b.log; exit';\
+	)
+	# Sleep for TEST_TIME seconds
+	sleep $(TEST_TIME)
+	# Remove all object files
+	${RM} *.o
+	# Print the last line of each log file
+	@$(foreach i,$(shell seq 1 5),\
+		echo $$(tail -n 2 $(OUTPUT_DIR)/$(i)_a.log | head -n 1 | awk -F',' '{print $$3}' | awk '{print $$1}') $$(tail -n 2 $(OUTPUT_DIR)/$(i)_b.log | head -n 1 | awk -F',' '{print $$3}' | awk '{print $$1}');\
+	)
 
+# Define the datalink target
 datalink: clean datalink.o protocol.o lprintf.o crc32.o crc_ec.o
+	# Create the output directory if it does not exist
 	mkdir $(OUTPUT_DIR) -p
+	# Link the object files to create the datalink executable
 	$(CXX) datalink.o protocol.o lprintf.o crc32.o crc_ec.o -o $(OUTPUT_DIR)/datalink -lm
 
+# Compile the datalink.c file into an object file
 datalink.o: datalink.c
 	$(CC) $(CFLAGS) -DSEQ_BITS=$(SEQ_BITS) -DDATA_TIMER=$(DATA_TIMER) -DACK_TIMER=$(ACK_TIMER) -DCOMPACT_FRAME=$(COMPACT_FRAME) -c datalink.c
 
+# Compile the crc_ec.cpp file into an object file
 crc_ec.o: crc_ec.cpp
 	$(CXX) $(CXXFLAGS) -DECC=$(ECC) -c crc_ec.cpp
 
+# Define the clean target to remove all object files
 clean:
-	${RM} *.o datalink *.log
+	${RM} *.o
 
+# Check if SEQ_BITS is set, if not, throw an error
 SEQ_BITS=
 ifeq ($(SEQ_BITS),)
 $(error SEQ_BITS is not set)
 endif
 
+# Check if DATA_TIMER is set, if not, throw an error
 DATA_TIMER=
 ifeq ($(DATA_TIMER),)
 $(error DATA_TIMER is not set)
 endif
 
+# Check if ACK_TIMER is set, if not, throw an error
 ACK_TIMER=
 ifeq ($(ACK_TIMER),)
 $(error ACK_TIMER is not set)
 endif
 
+# Check if COMPACT_FRAME is set, if not, throw an error
 COMPACT_FRAME=
 ifeq ($(COMPACT_FRAME),)
 $(error COMPACT_FRAME is not set)
 endif
 
-ifeq ($(COMPACT_FRAME),1)
+# Check if SEQ_BITS is between 1 and 6, if not, throw an error
 ifeq ($(filter $(SEQ_BITS),1 2 3 4 5 6),)
-$(error SEQ_BITS must be between 1 and 6 when using COMPACT_FRAME)
-endif
-else
-ifeq ($(filter $(SEQ_BITS),1 2 3 4 5 6 7 8),)
-$(error SEQ_BITS must be between 1 and 8)
-endif
+$(error SEQ_BITS must be between 1 and 6)
 endif
 
+# Check if ECC is set, if not, throw an error
 ECC=
 ifeq ($(ECC),)
 $(error ECC is not set)
 endif
 
+# Define the output directory name based on the parameters
 OUTPUT_DIR=TEST_$(SEQ_BITS)BITS_$(DATA_TIMER)DATA_$(ACK_TIMER)ACK
 ifeq ($(COMPACT_FRAME),1)
 OUTPUT_DIR+=_COMPACT
@@ -78,5 +98,6 @@ ifeq ($(ECC),1)
 OUTPUT_DIR+=_ECC
 endif
 
+# Remove spaces from the output directory name
 space=$(empty) $(empty)
 OUTPUT_DIR:=$(subst $(space),,$(OUTPUT_DIR))

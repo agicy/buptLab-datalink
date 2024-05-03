@@ -1,8 +1,18 @@
 #include "datalink.h"
 #include "crc_ec.h"
 #include "protocol.h"
+#include <assert.h>
+#include <signal.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
+
+static void handler(int signum) {
+    fflush(stdout);
+    if (log_file)
+        fflush(log_file);
+    exit(0);
+}
 
 static int phl_ready = 0;
 
@@ -11,6 +21,26 @@ static void put_frame(uint8_t *fp, int len) {
     send_frame(fp, len + 4);
     phl_ready = 0;
 }
+
+#ifndef SEQ_BITS
+#define SEQ_BITS 4
+#endif
+
+#ifndef DATA_TIMER
+#define DATA_TIMER 1500
+#endif
+
+#ifndef ACK_TIMER
+#define ACK_TIMER 300
+#endif
+
+#ifndef COMPACT_FRAME
+#define COMPACT_FRAME 1
+#endif
+
+#ifndef ECC
+#define ECC 1
+#endif
 
 #define MAX_SEQ ((1 << SEQ_BITS) - 1)
 #define NR_BUFS ((MAX_SEQ + 1) / 2)
@@ -23,23 +53,12 @@ typedef uint8_t packet_t[PKT_LEN];
 #define KIND_ACK_SIZE 1
 
 typedef struct frame {
-    uint8_t kind_ack;
+    uint8_t kind : 2;
+    uint8_t ack : 6;
     seq_nr seq;
     packet_t data;
     uint32_t padding;
 } frame;
-
-uint8_t get_kind(const frame *const fp) {
-    return (fp->kind_ack >> 6);
-}
-
-seq_nr get_ack(const frame *const fp) {
-    return fp->kind_ack & 0x3f;
-}
-
-void set_kind_ack(frame *const fp, uint8_t kind, seq_nr ack) {
-    fp->kind_ack = (kind << 6) | ack;
-}
 
 #else
 
@@ -52,19 +71,6 @@ typedef struct frame {
     packet_t data;
     uint32_t padding;
 } frame;
-
-uint8_t get_kind(const frame *const fp) {
-    return fp->kind;
-}
-
-seq_nr get_ack(const frame *const fp) {
-    return fp->ack;
-}
-
-void set_kind_ack(frame *const fp, uint8_t kind, seq_nr ack) {
-    fp->kind = kind;
-    fp->ack = ack;
-}
 
 #endif
 
@@ -96,7 +102,8 @@ window sender, receiver;
 
 static inline void handle_data_frame(seq_nr seq, seq_nr expected_id) {
     frame f;
-    set_kind_ack(&f, FRAME_DATA, expected_id);
+    f.kind = FRAME_DATA;
+    f.ack = expected_id;
     f.seq = seq;
     memcpy(f.data, sender.buffer[seq % NR_BUFS], sizeof(f.data));
     put_frame((uint8_t *)&f, KIND_ACK_SIZE + sizeof(f.seq) + sizeof(f.data));
@@ -105,13 +112,14 @@ static inline void handle_data_frame(seq_nr seq, seq_nr expected_id) {
 
 static inline void send_data_frame(seq_nr seq, seq_nr expected_id) {
     handle_data_frame(seq, expected_id);
-    start_timer(seq % NR_BUFS, DATA_TIMER);
+    start_timer(seq, DATA_TIMER);
     stop_ack_timer();
 }
 
 static inline void handle_ack_frame(seq_nr expected_id) {
     frame f;
-    set_kind_ack(&f, FRAME_ACK, expected_id);
+    f.kind = FRAME_ACK;
+    f.ack = expected_id;
     put_frame((uint8_t *)&f, KIND_ACK_SIZE);
 }
 
@@ -121,7 +129,8 @@ static inline void send_ack_frame(seq_nr expected_id) {
 
 static inline void handle_nak_frame(seq_nr expected_id) {
     frame f;
-    set_kind_ack(&f, FRAME_NAK, expected_id);
+    f.kind = FRAME_NAK;
+    f.ack = expected_id;
     put_frame((uint8_t *)&f, KIND_ACK_SIZE);
 }
 
@@ -130,7 +139,19 @@ static inline void send_nak_frame(seq_nr expected_id) {
     handle_nak_frame(expected_id);
 }
 
+static inline void handle_sack_frame(seq_nr ack_id) {
+    frame f;
+    f.kind = FRAME_SACK;
+    f.ack = ack_id;
+    put_frame((uint8_t *)&f, KIND_ACK_SIZE);
+}
+
+static inline void send_sack_frame(seq_nr ack_id) {
+    handle_sack_frame(ack_id);
+}
+
 int main(int argc, char **argv) {
+    signal(SIGTERM, handler);
     protocol_init(argc, argv);
 
     int event, arg;
@@ -151,8 +172,6 @@ int main(int argc, char **argv) {
             dbg_event("---- NETWORK_LAYER_READY\n");
             get_packet(sender.buffer[sender.end % NR_BUFS]);
             send_data_frame(sender.end, receiver.begin);
-            start_timer(sender.end % NR_BUFS, DATA_TIMER);
-            stop_ack_timer();
 
             sender.end = next(sender.end);
             ++sender.size;
@@ -173,48 +192,58 @@ int main(int argc, char **argv) {
                         send_nak_frame(receiver.begin);
                     break;
                 }
-            switch (get_kind(&f)) {
+
+            switch (f.kind) {
+
             case FRAME_DATA:
-                dbg_frame("Recv DATA %d %d, ID %d\n", f.seq, get_ack(&f), *(short *)f.data);
+                dbg_frame("Recv DATA %d %d, ID %d\n", f.seq, f.ack, *(short *)f.data);
                 if (between(&receiver, f.seq)) {
+                    if (f.seq != receiver.begin && no_nak)
+                        send_nak_frame(receiver.begin);
                     if (!arrived[f.seq % NR_BUFS]) {
                         arrived[f.seq % NR_BUFS] = 1;
                         memcpy(receiver.buffer[f.seq % NR_BUFS], f.data, sizeof(f.data));
-                    }
-                    if (f.seq != receiver.begin) {
-                        if (no_nak)
-                            send_nak_frame(receiver.begin);
+                        if (f.seq != receiver.begin)
+                            send_sack_frame(f.seq);
                         else
-                            start_ack_timer(ACK_TIMER);
+                            while (arrived[receiver.begin % NR_BUFS]) {
+                                put_packet(receiver.buffer[receiver.begin % NR_BUFS], PKT_LEN);
+                                no_nak = 1;
+                                arrived[receiver.begin % NR_BUFS] = 0;
+                                receiver.begin = next(receiver.begin), receiver.end = next(receiver.end);
+                                start_ack_timer(ACK_TIMER);
+                            }
                     }
                 }
-                while (arrived[receiver.begin % NR_BUFS]) {
-                    put_packet(receiver.buffer[receiver.begin % NR_BUFS], PKT_LEN);
-                    no_nak = 1;
-                    arrived[receiver.begin % NR_BUFS] = 0;
-                    receiver.begin = next(receiver.begin), receiver.end = next(receiver.end);
-                    start_ack_timer(ACK_TIMER);
-                }
                 break;
+
             case FRAME_ACK:
-                dbg_frame("Recv ACK %d\n", get_ack(&f));
+                dbg_frame("Recv ACK %d\n", f.ack);
                 break;
+
             case FRAME_NAK:
-                dbg_frame("Recv NAK %d\n", get_ack(&f));
-                if (between(&sender, get_ack(&f)))
-                    send_data_frame(get_ack(&f), receiver.begin);
+                dbg_frame("Recv NAK %d\n", f.ack);
+                if (between(&sender, f.ack))
+                    send_data_frame(f.ack, receiver.begin);
+                break;
+
+            case FRAME_SACK:
+                dbg_frame("Recv SACK %d\n", f.ack);
+                stop_timer(f.ack);
                 break;
             }
-            while (between(&sender, prev(get_ack(&f)))) {
-                stop_timer(sender.begin % NR_BUFS);
-                sender.begin = next(sender.begin);
-                --sender.size;
-            }
+
+            if (f.kind != FRAME_SACK)
+                while (between(&sender, prev(f.ack))) {
+                    stop_timer(sender.begin);
+                    sender.begin = next(sender.begin);
+                    --sender.size;
+                }
             break;
 
         case DATA_TIMEOUT:
             dbg_event("---- DATA %d timeout\n", arg);
-            send_data_frame(sender.begin, receiver.begin);
+            send_data_frame(arg, receiver.begin);
             break;
 
         case ACK_TIMEOUT:
