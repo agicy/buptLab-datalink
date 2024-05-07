@@ -23,15 +23,15 @@ static void put_frame(uint8_t *fp, int len) {
 }
 
 #ifndef SEQ_BITS
-#define SEQ_BITS 4
+#define SEQ_BITS 6
 #endif
 
 #ifndef DATA_TIMER
-#define DATA_TIMER 1500
+#define DATA_TIMER 1390
 #endif
 
 #ifndef ACK_TIMER
-#define ACK_TIMER 300
+#define ACK_TIMER 278
 #endif
 
 #ifndef COMPACT_FRAME
@@ -223,8 +223,8 @@ int main(int argc, char **argv) {
 
             case FRAME_NAK:
                 dbg_frame("Recv NAK %d\n", f.ack);
-                if (between(&sender, f.ack))
-                    send_data_frame(f.ack, receiver.begin);
+                assert(between(&sender, f.ack));
+                send_data_frame(f.ack, receiver.begin);
                 break;
 
             case FRAME_SACK:

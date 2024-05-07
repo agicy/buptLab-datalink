@@ -54,39 +54,39 @@ crc_ec.o: crc_ec.cpp
 clean:
 	${RM} *.o
 
-# Check if SEQ_BITS is set, if not, throw an error
+# Check if SEQ_BITS is not set
 SEQ_BITS=
 ifeq ($(SEQ_BITS),)
-$(error SEQ_BITS is not set)
+SEQ_BITS=6
 endif
 
-# Check if DATA_TIMER is set, if not, throw an error
+# Check if DATA_TIMER is not set
 DATA_TIMER=
 ifeq ($(DATA_TIMER),)
-$(error DATA_TIMER is not set)
+DATA_TIMER=1390
 endif
 
-# Check if ACK_TIMER is set, if not, throw an error
+# Check if ACK_TIMER is not set
 ACK_TIMER=
 ifeq ($(ACK_TIMER),)
-$(error ACK_TIMER is not set)
+ACK_TIMER=278
 endif
 
-# Check if COMPACT_FRAME is set, if not, throw an error
+# Check if COMPACT_FRAME is not set
 COMPACT_FRAME=
 ifeq ($(COMPACT_FRAME),)
-$(error COMPACT_FRAME is not set)
+COMPACT_FRAME=1
+endif
+
+# Check if ECC is not set
+ECC=
+ifeq ($(ECC),)
+ECC=1
 endif
 
 # Check if SEQ_BITS is between 1 and 6, if not, throw an error
 ifeq ($(filter $(SEQ_BITS),1 2 3 4 5 6),)
 $(error SEQ_BITS must be between 1 and 6)
-endif
-
-# Check if ECC is set, if not, throw an error
-ECC=
-ifeq ($(ECC),)
-$(error ECC is not set)
 endif
 
 # Define the output directory name based on the parameters
