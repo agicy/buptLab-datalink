@@ -6,10 +6,10 @@ CXX=g++
 CFLAGS=-static -O2 -DNDEBUG
 CXXFLAGS=-static -O2 -DNDEBUG
 
-# Check if TEST_TIME is set, if not, throw an error
+# Check if TEST_TIME is not set
 TEST_TIME=
 ifeq ($(TEST_TIME),)
-$(error TEST_TIME is not set)
+TEST_TIME=600
 endif
 
 # Define the options for the datalink program

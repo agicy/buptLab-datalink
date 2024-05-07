@@ -22,26 +22,6 @@ static void put_frame(uint8_t *fp, int len) {
     phl_ready = 0;
 }
 
-#ifndef SEQ_BITS
-#define SEQ_BITS 6
-#endif
-
-#ifndef DATA_TIMER
-#define DATA_TIMER 1390
-#endif
-
-#ifndef ACK_TIMER
-#define ACK_TIMER 278
-#endif
-
-#ifndef COMPACT_FRAME
-#define COMPACT_FRAME 1
-#endif
-
-#ifndef ECC
-#define ECC 1
-#endif
-
 #define MAX_SEQ ((1 << SEQ_BITS) - 1)
 #define NR_BUFS ((MAX_SEQ + 1) / 2)
 

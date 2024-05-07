@@ -1,4 +1,5 @@
 #include "crc_ec.h"
+#include "datalink.h"
 #include "protocol.h"
 #include <algorithm>
 #include <vector>
