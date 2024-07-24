@@ -1,11 +1,13 @@
 #include "datalink.h"
-#include "crc_ec.h"
-#include "protocol.h"
+
 #include <assert.h>
 #include <signal.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+
+#include "crc_ec.h"
+#include "protocol.h"
 
 static void handler(int signum) {
     fflush(stdout);

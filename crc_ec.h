@@ -9,7 +9,7 @@
 extern "C" {
 #endif
 
-int crc_ec(uint8_t *message, size_t len, uint32_t crc);
+int crc_ec(uint8_t *message, const size_t len, const uint32_t crc);
 
 #ifdef __cplusplus
 }
